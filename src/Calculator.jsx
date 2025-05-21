@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import Tesseract from 'tesseract.js';
 
@@ -11,41 +11,83 @@ const Calculator = () => {
   const [imageSrc, setImageSrc] = useState(null);
   const [loading, setLoading] = useState(false);
   const [useFrontCamera, setUseFrontCamera] = useState(false);
+  const [selection, setSelection] = useState(null);
 
   const webcamRef = useRef(null);
+  const canvasRef = useRef(null);
 
   const handleCapture = () => {
     const image = webcamRef.current.getScreenshot();
     setImageSrc(image);
+    setSelection(null);
   };
 
   const handleScan = async () => {
-    if (!imageSrc) return;
+    if (!imageSrc || !selection) return;
     setLoading(true);
     try {
-      const { data } = await Tesseract.recognize(imageSrc, 'eng', {
-        tessedit_char_whitelist: '0123456789+-*/=().^√πe',
-      });
+      const img = new Image();
+      img.src = imageSrc;
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = selection.width;
+        canvas.height = selection.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(
+          img,
+          selection.x,
+          selection.y,
+          selection.width,
+          selection.height,
+          0,
+          0,
+          selection.width,
+          selection.height
+        );
 
-      const cleanedText = data.text
-        .toLowerCase()
-        .replace(/kök/g, '√')
-        .replace(/pi/g, 'π')
-        .replace(/üst/g, '^')
-        .replace(/log/g, 'log')
-        .replace(/ln/g, 'ln')
-        .replace(/[\s]+/g, '')
-        .replace(/[^0-9+\-*/=().^√πe]/g, '')
-        .replace(/=+$/, '');
+        const croppedImage = canvas.toDataURL('image/png');
+        const { data } = await Tesseract.recognize(croppedImage, 'eng', {
+          tessedit_char_whitelist: '0123456789+-*/=().^√πe',
+        });
 
-      setInput(cleanedText);
+        const cleanedText = data.text
+          .toLowerCase()
+          .replace(/kök/g, '√')
+          .replace(/pi/g, 'π')
+          .replace(/üst/g, '^')
+          .replace(/log/g, 'log')
+          .replace(/ln/g, 'ln')
+          .replace(/[\s]+/g, '')
+          .replace(/[^0-9+\-*/=().^√πe]/g, '')
+          .replace(/=+$/, '');
+
+        setInput(cleanedText);
+        setShowScanner(false);
+        setImageSrc(null);
+        setSelection(null);
+      };
     } catch (err) {
       alert('Ошибка при распознавании');
     } finally {
       setLoading(false);
-      setShowScanner(false);
-      setImageSrc(null);
     }
+  };
+
+  const handleMouseDown = (e) => {
+    const rect = e.target.getBoundingClientRect();
+    const startX = e.clientX - rect.left;
+    const startY = e.clientY - rect.top;
+    setSelection({ x: startX, y: startY, width: 0, height: 0, startX, startY });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!selection || selection.width !== 0 || selection.height !== 0) return;
+    const rect = e.target.getBoundingClientRect();
+    const endX = e.clientX - rect.left;
+    const endY = e.clientY - rect.top;
+    const width = endX - selection.startX;
+    const height = endY - selection.startY;
+    setSelection((prev) => ({ ...prev, width, height }));
   };
 
   const handleClick = (value) => {
@@ -125,7 +167,6 @@ const Calculator = () => {
     ['7', '8', '9', '*'],
     ['4', '5', '6', '-'],
     ['1', '2', '3', '+'],
-    ['0', ',', '='],
   ];
 
   const sciButtons = [
@@ -210,7 +251,24 @@ const Calculator = () => {
             </>
           ) : (
             <>
-              <img src={imageSrc} alt="Preview" className="rounded-xl max-w-xs mb-4" />
+              <div
+                className="relative"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+              >
+                <img src={imageSrc} alt="Preview" className="rounded-xl max-w-xs mb-4" />
+                {selection && (
+                  <div
+                    className="absolute border-2 border-green-500"
+                    style={{
+                      top: selection.y,
+                      left: selection.x,
+                      width: selection.width,
+                      height: selection.height,
+                    }}
+                  ></div>
+                )}
+              </div>
               <button
                 onClick={handleScan}
                 className="bg-green-500 text-white px-6 py-2 rounded-xl text-lg"
@@ -229,6 +287,7 @@ const Calculator = () => {
             onClick={() => {
               setShowScanner(false);
               setImageSrc(null);
+              setSelection(null);
             }}
             className="absolute top-4 right-4 text-white text-xl"
           >
@@ -249,13 +308,8 @@ const Calculator = () => {
         )}
 
         <div className="grid grid-cols-4 gap-3">
-          {basicButtons.slice(0, 4).flat().map(renderButton)}
-          <button
-            onClick={() => handleClick('0')}
-            className="text-2xl font-semibold rounded-full py-4 col-span-2 bg-white text-black"
-          >
-            0
-          </button>
+          {basicButtons.flat().map(renderButton)}
+          {renderButton('0')}
           {renderButton(',')}
           {renderButton('=')}
         </div>
