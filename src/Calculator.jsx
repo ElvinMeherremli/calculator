@@ -10,6 +10,7 @@ const Calculator = () => {
   const [showScanner, setShowScanner] = useState(false);
   const [imageSrc, setImageSrc] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [useFrontCamera, setUseFrontCamera] = useState(false);
 
   const webcamRef = useRef(null);
 
@@ -27,8 +28,15 @@ const Calculator = () => {
       });
 
       const cleanedText = data.text
-        .replace(/[^0-9+\-*/=().^√πe]/g, '') // filter allowed chars only
-        .replace(/=+$/, ''); // remove trailing equals
+        .toLowerCase()
+        .replace(/kök/g, '√')
+        .replace(/pi/g, 'π')
+        .replace(/üst/g, '^')
+        .replace(/log/g, 'log')
+        .replace(/ln/g, 'ln')
+        .replace(/[\s]+/g, '')
+        .replace(/[^0-9+\-*/=().^√πe]/g, '')
+        .replace(/=+$/, '');
 
       setInput(cleanedText);
     } catch (err) {
@@ -177,6 +185,13 @@ const Calculator = () => {
 
       {showScanner && (
         <div className="absolute inset-0 bg-black bg-opacity-90 flex flex-col items-center justify-center z-50 p-4">
+          <button
+            onClick={() => setUseFrontCamera((prev) => !prev)}
+            className="bg-white text-black px-4 py-2 rounded-xl mb-2"
+          >
+            Переключить камеру
+          </button>
+
           {!imageSrc ? (
             <>
               <Webcam
@@ -184,6 +199,7 @@ const Calculator = () => {
                 ref={webcamRef}
                 screenshotFormat="image/jpeg"
                 className="w-72 h-56 rounded-xl mb-4"
+                videoConstraints={{ facingMode: useFrontCamera ? 'user' : 'environment' }}
               />
               <button
                 onClick={handleCapture}
